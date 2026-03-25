@@ -125,20 +125,19 @@ global {
 		if empty(boundary_roads) { boundary_roads <- road where (each.drivable); }
 
 		// Garages: placed on navigable roads near the BID (within 0.005 deg ~550m)
-		// Uses shape-proximity not centroid check, ensuring roads ARE near BID
+		// Uses ask pattern (not create block) so local vars and globals are accessible
 		if nb_garages > 0 {
-			list<road> near_bid_roads <- road where (
-				each.navigable_for_agents and
-				((each.location distance_to bid_geom) < 0.005)
-			);
-			if empty(near_bid_roads) {
-				near_bid_roads <- road where (each.navigable_for_agents);
-			}
-			create garage number: nb_garages {
-				road r <- one_of(near_bid_roads);
+			create garage number: nb_garages;
+			ask garage {
+				list<road> nearby <- road where (
+					each.navigable_for_agents and
+					((each.location distance_to world.bid_geom) < 0.005)
+				);
+				if empty(nearby) { nearby <- road where (each.navigable_for_agents); }
+				road r <- one_of(nearby);
 				if r != nil { location <- any_location_in(r); }
-				capacity       <- garage_capacity_per_garage;
-				occupied_count <- int(capacity * initial_garage_occupied_rate);
+				capacity       <- world.garage_capacity_per_garage;
+				occupied_count <- int(capacity * world.initial_garage_occupied_rate);
 			}
 		}
 
