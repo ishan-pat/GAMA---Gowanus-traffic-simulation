@@ -1,35 +1,30 @@
 /**
-* Model 03 — Garage Parking Scenarios
-* =====================================
+* Model 03 — Garage Parking: Multi-Year Scenarios
+* =================================================
 * Gowanus Urban Design Strategy Studio
 *
 * INSIGHT:
-*   Gowanus has 2,075 real on-street parking spots (gowanus_final_spots.shp)
-*   and only a handful of existing garage/carport facilities. The 2021 rezoning
-*   proposes large structured garages to absorb residential parking demand and
-*   free the streetscape for pedestrians and cyclists.
+*   Gowanus has 2,075 real on-street spots at ~90% midday occupancy today.
+*   The 2021 rezoning adds 8,000 new residential units by 2034 — each unit
+*   brings more resident vehicles competing for the same street spots as
+*   visitors and local businesses.
 *
 * TRANSFORMATION:
-*   Policy A — Mixed Use:
-*     Residents (new units) are incentivized to park in garages via pricing or
-*     assignment. Visitors and through-traffic continue to use on-street spots.
-*   Policy B — Garage Only:
-*     On-street parking is eliminated. All vehicles must use garages. If garages
-*     are full, incoming cars have no option and must leave the area.
+*   2029 — Mixed Garage Policy: new garages open; residents incentivized in
+*           via pricing/assignment; visitors keep street spots
+*   2034 — Garage Only Policy: street parking fully eliminated; all vehicles
+*           must use garages; overflow (no garage space) must leave
 *
 * PREDICTION (2-axis framework):
-*   Axis 1 — Parking policy:   Mixed (garage + street) ↔ Garage-only
-*   Axis 2 — Car type:         Resident ↔ Visitor
+*   Axis 1 — Time:         2024 (today) → 2029 (5 yr) → 2034 (10 yr)
+*   Axis 2 — Intervention: No Action ↔ Garage Policy
 *
-*   Key questions:
-*   - How quickly do garages fill under residential demand?
-*   - How many visitors get displaced when street parking is removed?
-*   - What is the overflow rate (cars that leave without parking)?
-*
-* DATA:
-*   Road network:    Brooklyn.shp  (full Brooklyn OSM roads — colleague contribution)
-*   Parking spots:   gowanus_final_spots.shp  (2,075 real spots — colleague contribution)
-*   Garage buildings: bid_buildings.shp filtered to type=garage/carport
+* SCENARIOS:
+*   2024_baseline      — today, street-only, 90% occ, low demand
+*   2029_no_action     — +30% residents, no garages, streets near-full
+*   2029_mixed_garages — same demand, garages open for residents
+*   2034_no_action     — full buildout, streets overwhelmed, high overflow
+*   2034_garage_only   — garage-only policy, streets freed, overflow managed
 */
 
 model garage_parking_scenarios
@@ -38,66 +33,65 @@ global {
 	float step <- 10 #s;
 	float arrival_threshold <- 0.00008;
 
-	// ── GIS Layers ─────────────────────────────────────────────────────────────
+	// ── GIS Layers ────────────────────────────────────────────────────────────
 	file shapefile_roads     <- shape_file("includes/Brooklyn.shp");
 	file shapefile_bid       <- shape_file("includes/BID_vector.shp");
 	file shapefile_spots     <- shape_file("includes/gowanus_final_spots.shp");
 	file shapefile_water     <- shape_file("includes/bid_water.shp");
 	file shapefile_buildings <- shape_file("includes/bid_buildings.shp");
 
-	geometry shape   <- envelope(shapefile_roads);
+	geometry shape    <- envelope(shapefile_roads);
 	geometry bid_geom <- nil;
-
 	graph road_network;
 
-	// ── Scenario ────────────────────────────────────────────────────────────────
-	// "mixed"       : residents → garages first; visitors → street only
-	// "garage_only" : all cars → garages only; street parking eliminated
-	string parking_mode <- "mixed";
+	// ── Scenario Selector ─────────────────────────────────────────────────────
+	string scenario_name <- "2024_baseline";
+	// among: 2024_baseline | 2029_no_action | 2029_mixed_garages
+	//        2034_no_action | 2034_garage_only
 
-	// ── Supply ──────────────────────────────────────────────────────────────────
-	// Capacity assigned to each garage/carport building
-	// (represents the planned large-scale structured garage at that site)
-	int garage_capacity_per_facility <- 200;
-	// Initial occupancy of garages at simulation start
-	float initial_garage_occupied_rate <- 0.50;
-	// Initial occupancy of street spots (from parking study: ~90% midday)
+	// ── Mode (set by scenario) ────────────────────────────────────────────────
+	// "street_only"  — no garages used; everyone competes for street spots
+	// "mixed"        — residents go to garages; visitors use street spots
+	// "garage_only"  — no street spots; everyone must use garages or leave
+	string parking_mode <- "street_only";
+
+	// ── Supply (set by scenario) ──────────────────────────────────────────────
+	int   garage_capacity_per_facility <- 0;
+	float initial_garage_occupied_rate <- 0.0;
 	float initial_street_occupied_rate <- 0.90;
 
-	// ── Demand ──────────────────────────────────────────────────────────────────
-	// Fraction of incoming cars that are residents (prefer garages)
-	float resident_share <- 0.40;
-	int   initial_cars          <- 80;
-	float spawn_prob_per_step   <- 0.15;
-	int   max_new_cars_per_spawn <- 3;
-	// Max times a car will retry finding a spot before giving up
+	// ── Demand (set by scenario) ──────────────────────────────────────────────
+	float resident_share        <- 0.30;
+	int   initial_cars          <- 60;
+	float spawn_prob_per_step   <- 0.10;
+	int   max_new_cars_per_spawn <- 2;
 	int   max_search_attempts   <- 8;
 
-	// ── Dwell times (step = 10 s) ────────────────────────────────────────────────
-	// Residents park long (overnight / all day)
-	int resident_min_dwell  <- 1800;   // ~5 hours
-	int resident_max_dwell  <- 10800;  // ~30 hours
-	// Visitors park short (errand / meal)
-	int visitor_min_dwell   <- 180;    // ~30 min
-	int visitor_max_dwell   <- 720;    // ~2 hours
+	// ── Dwell times (10 s/step) ───────────────────────────────────────────────
+	int resident_min_dwell <- 1800;    // ~5 h
+	int resident_max_dwell <- 10800;   // ~30 h
+	int visitor_min_dwell  <- 180;     // ~30 min
+	int visitor_max_dwell  <- 720;     // ~2 h
 
-	// ── Boundary helpers ─────────────────────────────────────────────────────────
+	// ── Boundary helpers ──────────────────────────────────────────────────────
 	list<road> boundary_roads <- [];
 	float area_boundary_buffer <- 0.0008;
 	float area_min_x <- 0.0; float area_max_x <- 0.0;
 	float area_min_y <- 0.0; float area_max_y <- 0.0;
 
-	// ── Metrics ──────────────────────────────────────────────────────────────────
-	int residents_parked_garage  <- 0;
-	int residents_parked_street  <- 0;
-	int visitors_parked_street   <- 0;
-	int overflow_left            <- 0;   // cars that couldn't park and left
-	int total_garage_occupied    <- 0;
-	int total_street_occupied    <- 0;
-	float garage_occupancy_pct   <- 0.0;
-	float street_occupancy_pct   <- 0.0;
+	// ── Metrics ───────────────────────────────────────────────────────────────
+	int   residents_parked_garage <- 0;
+	int   residents_parked_street <- 0;
+	int   visitors_parked_street  <- 0;
+	int   overflow_left           <- 0;
+	int   total_garage_occupied   <- 0;
+	int   total_street_occupied   <- 0;
+	float garage_occupancy_pct    <- 0.0;
+	float street_occupancy_pct    <- 0.0;
 
 	init {
+		do apply_scenario_parameters;
+
 		create bid_boundary from: shapefile_bid;
 		if not empty(bid_boundary) { bid_geom <- one_of(bid_boundary).shape; }
 
@@ -118,7 +112,7 @@ global {
 		if empty(boundary_roads) { boundary_roads <- road where (each.navigable_for_agents); }
 		if empty(boundary_roads) { boundary_roads <- road where (each.drivable); }
 
-		// Load garages from buildings — create all, then remove non-garage types
+		// Garages — only meaningful when parking_mode != "street_only"
 		create garage from: shapefile_buildings with: [btype::string(read("type"))];
 		ask garage where (each.btype != "garage" and each.btype != "carport") { do die; }
 		ask garage {
@@ -126,20 +120,85 @@ global {
 			occupied_count <- int(garage_capacity_per_facility * initial_garage_occupied_rate);
 		}
 
-		// Street spots: only created in mixed mode
-		if parking_mode = "mixed" {
-			create street_spot from: shapefile_spots with: [
-				heading::float(read("heading"))
-			];
+		// Street spots — not created in garage_only mode
+		if parking_mode != "garage_only" {
+			create street_spot from: shapefile_spots with: [heading::float(read("heading"))];
 			ask street_spot { occupied <- flip(initial_street_occupied_rate); }
 		}
 
-		// Seed initial cars
-		create car number: initial_cars {
-			do init_car;
-		}
+		create car number: initial_cars { do init_car; }
 
 		do update_metrics;
+	}
+
+	action apply_scenario_parameters {
+		// ── 2024 Baseline: street-only, 90% occ, low demand ──
+		if scenario_name = "2024_baseline" {
+			parking_mode                <- "street_only";
+			garage_capacity_per_facility <- 0;
+			initial_garage_occupied_rate <- 0.0;
+			initial_street_occupied_rate <- 0.90;
+			resident_share               <- 0.30;
+			initial_cars                 <- 60;
+			spawn_prob_per_step          <- 0.10;
+			max_new_cars_per_spawn       <- 2;
+		}
+		// ── 2029 No Action: +30% residents, still street-only, near-full ──
+		else if scenario_name = "2029_no_action" {
+			parking_mode                <- "street_only";
+			garage_capacity_per_facility <- 0;
+			initial_garage_occupied_rate <- 0.0;
+			initial_street_occupied_rate <- 0.96;
+			resident_share               <- 0.50;
+			initial_cars                 <- 80;
+			spawn_prob_per_step          <- 0.16;
+			max_new_cars_per_spawn       <- 3;
+		}
+		// ── 2029 Mixed Garages: same demand, residents routed to garages ──
+		// Street spots freed up; overflow drops significantly
+		else if scenario_name = "2029_mixed_garages" {
+			parking_mode                <- "mixed";
+			garage_capacity_per_facility <- 150;
+			initial_garage_occupied_rate <- 0.40;
+			initial_street_occupied_rate <- 0.72;
+			resident_share               <- 0.50;
+			initial_cars                 <- 80;
+			spawn_prob_per_step          <- 0.16;
+			max_new_cars_per_spawn       <- 3;
+		}
+		// ── 2034 No Action: full 8,000-unit buildout, streets overwhelmed ──
+		else if scenario_name = "2034_no_action" {
+			parking_mode                <- "street_only";
+			garage_capacity_per_facility <- 0;
+			initial_garage_occupied_rate <- 0.0;
+			initial_street_occupied_rate <- 0.99;
+			resident_share               <- 0.65;
+			initial_cars                 <- 120;
+			spawn_prob_per_step          <- 0.28;
+			max_new_cars_per_spawn       <- 5;
+		}
+		// ── 2034 Garage Only: street parking eliminated, garages expanded ──
+		// Overflow = cars that can't find garage space and must leave
+		else if scenario_name = "2034_garage_only" {
+			parking_mode                <- "garage_only";
+			garage_capacity_per_facility <- 250;
+			initial_garage_occupied_rate <- 0.55;
+			initial_street_occupied_rate <- 0.0;
+			resident_share               <- 0.65;
+			initial_cars                 <- 120;
+			spawn_prob_per_step          <- 0.28;
+			max_new_cars_per_spawn       <- 5;
+		}
+		else {
+			parking_mode                <- "street_only";
+			garage_capacity_per_facility <- 0;
+			initial_garage_occupied_rate <- 0.0;
+			initial_street_occupied_rate <- 0.90;
+			resident_share               <- 0.30;
+			initial_cars                 <- 60;
+			spawn_prob_per_step          <- 0.10;
+			max_new_cars_per_spawn       <- 2;
+		}
 	}
 
 	reflex spawn_arrivals when: flip(spawn_prob_per_step) {
@@ -150,24 +209,19 @@ global {
 	reflex refresh_metrics { do update_metrics; }
 
 	action update_metrics {
+		int total_garage_cap <- sum(garage collect each.capacity);
 		total_garage_occupied <- sum(garage collect each.occupied_count);
-		int total_garage_cap  <- sum(garage collect each.capacity);
 		garage_occupancy_pct  <- total_garage_cap > 0 ?
 			100.0 * float(total_garage_occupied) / float(total_garage_cap) : 0.0;
 
-		if parking_mode = "mixed" {
-			total_street_occupied <- length(street_spot where (each.occupied));
-			int total_street      <- length(street_spot);
-			street_occupancy_pct  <- total_street > 0 ?
-				100.0 * float(total_street_occupied) / float(total_street) : 0.0;
-		} else {
-			total_street_occupied <- 0;
-			street_occupancy_pct  <- 0.0;
-		}
+		total_street_occupied <- length(street_spot where (each.occupied));
+		int total_street      <- length(street_spot);
+		street_occupancy_pct  <- total_street > 0 ?
+			100.0 * float(total_street_occupied) / float(total_street) : 0.0;
 	}
 }
 
-// ── Species ──────────────────────────────────────────────────────────────────
+// ── Species ───────────────────────────────────────────────────────────────────
 
 species bid_boundary {
 	aspect default { draw shape color: rgb(0,0,0,0) border: #red width: 3; }
@@ -222,24 +276,27 @@ species road {
 
 species garage {
 	string btype         <- "unknown";
-	int   capacity      <- 200;
-	int   occupied_count <- 0;
-	bool  has_space     <- true update: (occupied_count < capacity);
-	float occupancy_pct <- 0.0  update: (100.0 * float(occupied_count) / float(max([1, capacity])));
+	int    capacity      <- 200;
+	int    occupied_count <- 0;
+	bool   has_space     <- true update: (occupied_count < capacity);
+	float  occupancy_pct <- 0.0  update:
+		(100.0 * float(occupied_count) / float(max([1, capacity])));
 
 	action claim_spot   { occupied_count <- min([capacity, occupied_count + 1]); }
 	action release_spot { occupied_count <- max([0, occupied_count - 1]); }
 
 	aspect default {
-		if occupancy_pct < 60.0 {
+		if capacity = 0 {
+			draw shape color: rgb(180,180,180) border: #black;
+		} else if occupancy_pct < 60.0 {
 			draw shape color: #forestgreen border: #black;
-			draw circle(12) color: #forestgreen border: #white;
+			draw circle(14) color: #forestgreen border: #white;
 		} else if occupancy_pct < 85.0 {
 			draw shape color: #darkorange border: #black;
-			draw circle(12) color: #darkorange border: #white;
+			draw circle(14) color: #darkorange border: #white;
 		} else {
 			draw shape color: #red border: #black;
-			draw circle(12) color: #red border: #white;
+			draw circle(14) color: #red border: #white;
 		}
 	}
 }
@@ -254,31 +311,27 @@ species street_spot {
 }
 
 species car skills: [moving] {
-	string car_type   <- "visitor";   // "resident" | "visitor"
-	string state      <- "arriving";  // arriving | seeking_garage | seeking_street | parked_garage | parked_street | leaving
-	int    dwell_steps <- 0;
+	string car_type      <- "visitor";
+	string state         <- "arriving";
+	int    dwell_steps   <- 0;
 	int    search_attempts <- 0;
-	point  exit_target <- nil;
-	garage    target_garage <- nil;
-	street_spot target_spot <- nil;
+	point  exit_target   <- nil;
+	garage      target_garage <- nil;
+	street_spot target_spot   <- nil;
 
 	action init_car {
 		car_type <- flip(resident_share) ? "resident" : "visitor";
 		state    <- "arriving";
-
 		road start_road <- one_of(boundary_roads);
 		if start_road = nil { start_road <- one_of(road where (each.navigable_for_agents)); }
 		if start_road != nil { location <- any_location_in(start_road); }
-
 		do choose_initial_destination;
 	}
 
 	action choose_initial_destination {
-		// Residents try garage first (both modes)
-		// Visitors try street in mixed mode, garage in garage_only mode
-		if car_type = "resident" {
+		if parking_mode = "garage_only" {
 			do seek_garage;
-		} else if parking_mode = "garage_only" {
+		} else if parking_mode = "mixed" and car_type = "resident" {
 			do seek_garage;
 		} else {
 			do seek_street;
@@ -292,12 +345,9 @@ species car skills: [moving] {
 			state <- "seeking_garage";
 			target_spot <- nil;
 		} else {
-			// No garage space
-			if car_type = "resident" and parking_mode = "mixed" {
-				// Residents fall back to street in mixed mode
+			if parking_mode = "mixed" and car_type = "resident" {
 				do seek_street;
 			} else {
-				// Garage-only: must leave; visitors in mixed mode don't use garages
 				overflow_left <- overflow_left + 1;
 				do start_leaving;
 			}
@@ -311,7 +361,6 @@ species car skills: [moving] {
 			state <- "seeking_street";
 			target_garage <- nil;
 		} else {
-			// No street spots available
 			overflow_left <- overflow_left + 1;
 			do start_leaving;
 		}
@@ -324,12 +373,9 @@ species car skills: [moving] {
 		if exit_road != nil { exit_target <- any_location_in(exit_road); }
 	}
 
-	// ── Movement ────────────────────────────────────────────────────────────────
-
 	reflex drive_to_garage when: state = "seeking_garage" and target_garage != nil {
 		speed <- 25 #km/#h;
 		do goto target: target_garage.location on: road_network recompute_path: false;
-
 		if (location distance_to target_garage.location) < (arrival_threshold * 20000) {
 			if target_garage.has_space {
 				ask target_garage { do claim_spot; }
@@ -337,11 +383,8 @@ species car skills: [moving] {
 				dwell_steps <- (car_type = "resident") ?
 					(resident_min_dwell + rnd(resident_max_dwell - resident_min_dwell)) :
 					(visitor_min_dwell  + rnd(visitor_max_dwell  - visitor_min_dwell));
-				if car_type = "resident" {
-					residents_parked_garage <- residents_parked_garage + 1;
-				}
+				residents_parked_garage <- residents_parked_garage + 1;
 			} else {
-				// Spot taken since we started driving — try again or give up
 				search_attempts <- search_attempts + 1;
 				if search_attempts < max_search_attempts {
 					do seek_garage;
@@ -356,7 +399,6 @@ species car skills: [moving] {
 	reflex drive_to_spot when: state = "seeking_street" and target_spot != nil {
 		speed <- 20 #km/#h;
 		do goto target: target_spot.location on: road_network recompute_path: false;
-
 		if (location distance_to target_spot.location) < (arrival_threshold * 20000) {
 			if not target_spot.occupied {
 				target_spot.occupied <- true;
@@ -402,9 +444,7 @@ species car skills: [moving] {
 	reflex drive_to_exit when: state = "leaving" and exit_target != nil {
 		speed <- 30 #km/#h;
 		do goto target: exit_target on: road_network recompute_path: false;
-		if (location distance_to exit_target) < (arrival_threshold * 20000) {
-			do die;
-		}
+		if (location distance_to exit_target) < (arrival_threshold * 20000) { do die; }
 	}
 
 	aspect default {
@@ -412,9 +452,10 @@ species car skills: [moving] {
 			draw circle(6) color: #gold border: #white;
 		} else if state = "parked_street" {
 			draw circle(6) color: #yellow border: rgb(80,80,0);
+		} else if state = "seeking_garage" and car_type = "resident" {
+			draw circle(6) color: rgb(0,200,100) border: #white;
 		} else if state = "seeking_garage" {
-			rgb c <- (car_type = "resident") ? rgb(0,200,100) : rgb(0,150,255);
-			draw circle(6) color: c border: #white;
+			draw circle(6) color: rgb(0,150,255) border: #white;
 		} else if state = "seeking_street" {
 			draw circle(6) color: rgb(255,140,0) border: #white;
 		} else if state = "leaving" {
@@ -428,33 +469,20 @@ species car skills: [moving] {
 // ── Experiment ────────────────────────────────────────────────────────────────
 
 experiment garage_scenarios type: gui {
-	parameter "Parking Mode"
-		var: parking_mode category: "Scenario"
-		among: ["mixed", "garage_only"];
-	parameter "Resident Share (%)"
-		var: resident_share category: "Demand"
-		min: 0.0 max: 1.0;
-	parameter "Garage Capacity (per facility)"
-		var: garage_capacity_per_facility category: "Supply";
-	parameter "Initial Garage Occupancy"
-		var: initial_garage_occupied_rate category: "Supply"
-		min: 0.0 max: 1.0;
-	parameter "Initial Street Occupancy"
-		var: initial_street_occupied_rate category: "Supply"
-		min: 0.0 max: 1.0;
-	parameter "Spawn prob / step"
-		var: spawn_prob_per_step category: "Demand";
+	parameter "Scenario" var: scenario_name category: "Scenario"
+		among: ["2024_baseline","2029_no_action","2029_mixed_garages",
+		        "2034_no_action","2034_garage_only"];
 
 	output {
-		monitor "Mode"                      value: parking_mode;
-		monitor "Active Cars"               value: length(car);
-		monitor "Garage Occupancy %"        value: int(garage_occupancy_pct);
-		monitor "Street Occupancy %"        value: int(street_occupancy_pct);
-		monitor "Residents → Garage"        value: residents_parked_garage;
+		monitor "Scenario"                   value: scenario_name;
+		monitor "Parking Mode"               value: parking_mode;
+		monitor "Active Cars"                value: length(car);
+		monitor "Garage Occupancy %"         value: int(garage_occupancy_pct);
+		monitor "Street Occupancy %"         value: int(street_occupancy_pct);
+		monitor "Residents → Garage"         value: residents_parked_garage;
 		monitor "Residents → Street (spill)" value: residents_parked_street;
-		monitor "Visitors → Street"         value: visitors_parked_street;
+		monitor "Visitors → Street"          value: visitors_parked_street;
 		monitor "Overflow (left w/o parking)" value: overflow_left;
-		monitor "Garages w/ Space"          value: length(garage where (each.has_space));
 
 		display "Gowanus — Garage Scenarios" type: 2d background: #white {
 			species water_body;
@@ -465,15 +493,15 @@ experiment garage_scenarios type: gui {
 			species car;
 		}
 
-		display "Garage vs Street Occupancy" type: 2d {
-			chart "Occupancy Over Time (%)" type: series
+		display "Prediction Charts" type: 2d {
+			chart "Occupancy %" type: series
 				size: {1.0, 0.34} position: {0.0, 0.0} {
 				data "Garage occupancy %"
 					value: garage_occupancy_pct color: #forestgreen style: line;
 				data "Street occupancy %"
 					value: street_occupancy_pct color: #steelblue style: line;
 			}
-			chart "Parking by Destination" type: series
+			chart "Where Residents Park" type: series
 				size: {1.0, 0.33} position: {0.0, 0.34} {
 				data "Residents in garage"
 					value: residents_parked_garage color: #gold style: line;
@@ -484,7 +512,7 @@ experiment garage_scenarios type: gui {
 			}
 			chart "Overflow: Left Without Parking" type: series
 				size: {1.0, 0.33} position: {0.0, 0.67} {
-				data "Cumulative overflow"
+				data "Cars left without parking"
 					value: overflow_left color: #red style: line;
 			}
 		}
