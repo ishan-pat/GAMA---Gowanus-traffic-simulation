@@ -118,10 +118,11 @@ global {
 		if empty(boundary_roads) { boundary_roads <- road where (each.navigable_for_agents); }
 		if empty(boundary_roads) { boundary_roads <- road where (each.drivable); }
 
-		// Load garages from buildings (type = "garage" or "carport")
-		create garage from: shapefile_buildings
-			where: (string(read("type")) = "garage" or string(read("type")) = "carport") {
-			capacity      <- garage_capacity_per_facility;
+		// Load garages from buildings — create all, remove non-garage types
+		create garage from: shapefile_buildings with: [btype::string(read("type"))];
+		ask garage where (each.btype != "garage" and each.btype != "carport") { do die; }
+		ask garage {
+			capacity       <- garage_capacity_per_facility;
 			occupied_count <- int(garage_capacity_per_facility * initial_garage_occupied_rate);
 		}
 
@@ -220,6 +221,7 @@ species road {
 }
 
 species garage {
+	string btype        <- "unknown";
 	int   capacity      <- 200;
 	int   occupied_count <- 0;
 	bool  has_space     <- true update: (occupied_count < capacity);
