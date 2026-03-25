@@ -30,10 +30,10 @@ global {
 	float step <- 10 #s;
 
 	// ── GIS Layers ──────────────────────────────────────────────────────────
-	file shapefile_bid       <- shape_file("../includes/BID_vector.shp");
-	file shapefile_buildings <- shape_file("../includes/bid_buildings.shp");
-	file shapefile_water     <- shape_file("../includes/bid_water.shp");
-	file shapefile_roads     <- shape_file("../includes/bid_roads.shp");
+	file shapefile_bid       <- shape_file("includes/BID_vector.shp");
+	file shapefile_buildings <- shape_file("includes/bid_buildings.shp");
+	file shapefile_water     <- shape_file("includes/bid_water.shp");
+	file shapefile_roads     <- shape_file("includes/bid_roads.shp");
 
 	geometry shape   <- envelope(shapefile_roads);
 	geometry bid_geom;

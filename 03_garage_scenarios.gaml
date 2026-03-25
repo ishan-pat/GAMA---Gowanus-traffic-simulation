@@ -39,11 +39,11 @@ global {
 	float arrival_threshold <- 0.00008;
 
 	// ── GIS Layers ─────────────────────────────────────────────────────────────
-	file shapefile_roads     <- shape_file("../includes/Brooklyn.shp");
-	file shapefile_bid       <- shape_file("../includes/BID_vector.shp");
-	file shapefile_spots     <- shape_file("../includes/gowanus_final_spots.shp");
-	file shapefile_water     <- shape_file("../includes/bid_water.shp");
-	file shapefile_buildings <- shape_file("../includes/bid_buildings.shp");
+	file shapefile_roads     <- shape_file("includes/Brooklyn.shp");
+	file shapefile_bid       <- shape_file("includes/BID_vector.shp");
+	file shapefile_spots     <- shape_file("includes/gowanus_final_spots.shp");
+	file shapefile_water     <- shape_file("includes/bid_water.shp");
+	file shapefile_buildings <- shape_file("includes/bid_buildings.shp");
 
 	geometry shape   <- envelope(shapefile_roads);
 	geometry bid_geom <- nil;
