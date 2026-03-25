@@ -229,12 +229,16 @@ species garage {
 	action release_spot { occupied_count <- max([0, occupied_count - 1]); }
 
 	aspect default {
-		// Green → Orange → Red based on occupancy
-		rgb c <- (occupancy_pct < 60.0) ? #forestgreen :
-			     (occupancy_pct < 85.0) ? #darkorange  : #red;
-		draw shape color: c border: #black;
-		draw circle(12) at: location color: c border: #white;
-		draw string(int(occupancy_pct) + "%") at: location color: #white font: font("Arial", 8, #bold);
+		if occupancy_pct < 60.0 {
+			draw shape color: #forestgreen border: #black;
+			draw circle(12) color: #forestgreen border: #white;
+		} else if occupancy_pct < 85.0 {
+			draw shape color: #darkorange border: #black;
+			draw circle(12) color: #darkorange border: #white;
+		} else {
+			draw shape color: #red border: #black;
+			draw circle(12) color: #red border: #white;
+		}
 	}
 }
 
