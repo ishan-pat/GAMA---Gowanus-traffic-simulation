@@ -39,13 +39,14 @@ global {
 
 	// Arrival detection distance in geographic degrees (~9 m per 0.00008 deg)
 	float spot_threshold   <- 0.00016;  // ~18 m  — street spot detection
-	float garage_threshold <- 0.0004;   // ~44 m  — garage detection (larger facility)
+	float garage_threshold <- 0.002;    // ~220 m — generous garage detection
 
 	// ── GIS Layers ────────────────────────────────────────────────────────────
-	file shapefile_roads <- shape_file("includes/Brooklyn.shp");
-	file shapefile_bid   <- shape_file("includes/BID_vector.shp");
-	file shapefile_spots <- shape_file("includes/gowanus_final_spots.shp");
-	file shapefile_water <- shape_file("includes/bid_water.shp");
+	file shapefile_roads     <- shape_file("includes/Brooklyn.shp");
+	file shapefile_bid       <- shape_file("includes/BID_vector.shp");
+	file shapefile_spots     <- shape_file("includes/gowanus_final_spots.shp");
+	file shapefile_water     <- shape_file("includes/bid_water.shp");
+	file shapefile_buildings <- shape_file("includes/bid_buildings.shp");
 
 	geometry shape    <- envelope(shapefile_roads);
 	geometry bid_geom <- nil;
@@ -106,6 +107,7 @@ global {
 		if not empty(bid_boundary) { bid_geom <- one_of(bid_boundary).shape; }
 
 		create water_body from: shapefile_water;
+		create building from: shapefile_buildings with: [btype::string(read("type"))];
 
 		create road from: shapefile_roads with: [
 			fclass::string(read("fclass")),
@@ -122,11 +124,18 @@ global {
 		if empty(boundary_roads) { boundary_roads <- road where (each.navigable_for_agents); }
 		if empty(boundary_roads) { boundary_roads <- road where (each.drivable); }
 
-		// Garages: placed at random BID road locations for even distribution
+		// Garages: placed on navigable roads near the BID (within 0.005 deg ~550m)
+		// Uses shape-proximity not centroid check, ensuring roads ARE near BID
 		if nb_garages > 0 {
+			list<road> near_bid_roads <- road where (
+				each.navigable_for_agents and
+				((each.location distance_to bid_geom) < 0.005)
+			);
+			if empty(near_bid_roads) {
+				near_bid_roads <- road where (each.navigable_for_agents);
+			}
 			create garage number: nb_garages {
-				road r <- one_of(road where (each.in_bid and each.navigable_for_agents));
-				if r = nil { r <- one_of(road where (each.in_bid and each.drivable)); }
+				road r <- one_of(near_bid_roads);
 				if r != nil { location <- any_location_in(r); }
 				capacity       <- garage_capacity_per_garage;
 				occupied_count <- int(capacity * initial_garage_occupied_rate);
@@ -263,6 +272,17 @@ species water_body {
 	aspect default { draw shape color: rgb(70,130,180,140) border: rgb(70,130,180); }
 }
 
+species building {
+	string btype <- "unknown";
+	aspect default {
+		if btype = "garage" or btype = "carport" {
+			draw shape color: rgb(0,180,110) border: rgb(0,120,80);
+		} else {
+			draw shape color: rgb(210,210,210) border: rgb(150,150,150);
+		}
+	}
+}
+
 species road {
 	string fclass    <- "unknown";
 	string road_name <- "";
@@ -332,7 +352,7 @@ species street_spot {
 	bool  occupied <- false;
 
 	aspect default {
-		draw square(8) color: (occupied ? #red : #lime) rotate: heading;
+		draw square(12) color: (occupied ? #red : #lime) rotate: heading;
 	}
 }
 
@@ -499,7 +519,8 @@ experiment garage_scenarios type: gui {
 		monitor "Mode"                        value: parking_mode;
 		monitor "Active Cars"                 value: length(car);
 		monitor "Street Spots (sample of 2075)" value: length(street_spot);
-		monitor "Garages"                     value: nb_garages;
+		monitor "Garages (agents created)"     value: length(garage);
+		monitor "Total Garage Capacity"        value: sum(garage collect each.capacity);
 		monitor "Street Occupancy %"          value: int(street_occupancy_pct);
 		monitor "Garage Occupancy %"          value: int(garage_occupancy_pct);
 		monitor "Residents → Garage"          value: residents_parked_garage;
@@ -509,6 +530,7 @@ experiment garage_scenarios type: gui {
 
 		display "Gowanus — Garage Scenarios" type: 2d background: #white {
 			species water_body;
+			species building;
 			species road;
 			species street_spot;
 			species garage;
