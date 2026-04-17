@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Street Knowledge — Gowanus BID Parking Strategy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --black:   #0f0f0f;
+    --white:   #ffffff;
+    --gray-50: #f8f8f8;
+    --gray-100:#f0f0f0;
+    --gray-200:#e0e0e0;
+    --gray-400:#999;
+    --gray-600:#555;
+    --gray-800:#222;
+
+    --red:     #d93025;
+    --red-l:   #fdecea;
+    --blue:    #1a6fad;
+    --blue-l:  #e8f1fa;
+    --gold:    #b87800;
+    --gold-l:  #fdf3dc;
+    --green:   #1a7a45;
+    --green-l: #e8f5ee;
+
+    --radius:  12px;
+    --shadow:  0 2px 16px rgba(0,0,0,.08);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--white);
+    color: var(--gray-800);
+    line-height: 1.6;
+    font-size: 16px;
+  }
+
+  /* ── Nav ── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(255,255,255,.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--gray-200);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 40px; height: 56px;
+  }
+  .nav-logo { font-size: 13px; font-weight: 700; letter-spacing: .08em; color: var(--black); text-transform: uppercase; }
+  .nav-links { display: flex; gap: 32px; }
+  .nav-links a { font-size: 13px; color: var(--gray-600); text-decoration: none; font-weight: 500; }
+  .nav-links a:hover { color: var(--black); }
+
+  /* ── Sections ── */
+  section { padding: 96px 0; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 0 40px; }
+  .container-wide { max-width: 1400px; margin: 0 auto; padding: 0 40px; }
+
+  /* ── Hero ── */
+  #hero {
+    padding: 0;
+    min-height: 100vh;
+    background: var(--black);
+    display: flex; flex-direction: column; justify-content: flex-end;
+    position: relative; overflow: hidden;
+  }
+  .hero-bg {
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, #0f0f1a 0%, #0a1628 50%, #0f1a0f 100%);
+  }
+  .hero-grid {
+    position: absolute; inset: 0; opacity: .06;
+    background-image:
+      linear-gradient(rgba(255,255,255,.5) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.5) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+  .hero-content {
+    position: relative; z-index: 2;
+    padding: 0 60px 80px;
+    max-width: 1200px;
+  }
+  .hero-eyebrow {
+    font-size: 11px; font-weight: 700; letter-spacing: .15em;
+    color: rgba(255,255,255,.4); text-transform: uppercase; margin-bottom: 24px;
+  }
+  .hero-title {
+    font-size: clamp(52px, 7vw, 96px);
+    font-weight: 900; line-height: 1.0;
+    color: var(--white); margin-bottom: 12px;
+  }
+  .hero-title span { color: #4ade80; }
+  .hero-subtitle {
+    font-size: clamp(18px, 2vw, 26px);
+    font-weight: 300; color: rgba(255,255,255,.6);
+    margin-bottom: 48px; max-width: 600px;
+  }
+  .hero-stats {
+    display: flex; gap: 48px; flex-wrap: wrap; margin-bottom: 64px;
+  }
+  .hero-stat { border-left: 3px solid rgba(255,255,255,.15); padding-left: 20px; }
+  .hero-stat-num { font-size: 40px; font-weight: 800; color: var(--white); line-height: 1; }
+  .hero-stat-label { font-size: 12px; color: rgba(255,255,255,.4); margin-top: 4px; text-transform: uppercase; letter-spacing: .06em; }
+  .hero-scroll {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; color: rgba(255,255,255,.3); letter-spacing: .1em; text-transform: uppercase;
+  }
+
+  /* ── Section Headers ── */
+  .section-eyebrow {
+    font-size: 11px; font-weight: 700; letter-spacing: .15em;
+    text-transform: uppercase; margin-bottom: 12px;
+  }
+  .section-title {
+    font-size: clamp(32px, 4vw, 52px);
+    font-weight: 800; line-height: 1.1; margin-bottom: 16px;
+  }
+  .section-subtitle {
+    font-size: 17px; color: var(--gray-600); max-width: 640px; line-height: 1.7;
+  }
+  .section-divider { width: 48px; height: 4px; border-radius: 2px; margin: 24px 0 48px; }
+
+  /* ── Phase badge ── */
+  .phase-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px; border-radius: 100px;
+    font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .phase-badge::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+  /* ── Map section ── */
+  #insight { background: var(--gray-50); }
+  #map { height: 520px; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  .map-legend {
+    display: flex; gap: 24px; flex-wrap: wrap;
+    margin-top: 16px; padding: 16px 20px;
+    background: var(--white); border-radius: var(--radius);
+    border: 1px solid var(--gray-200);
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--gray-600); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── Stat cards ── */
+  .stat-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 48px; }
+  .stat-card {
+    background: var(--white); border-radius: var(--radius);
+    border: 1px solid var(--gray-200); padding: 28px;
+    position: relative; overflow: hidden;
+  }
+  .stat-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+    background: var(--accent-color);
+  }
+  .stat-num { font-size: 48px; font-weight: 800; line-height: 1; margin-bottom: 8px; color: var(--accent-color); }
+  .stat-label { font-size: 14px; color: var(--gray-600); }
+
+  /* ── Scenario sections ── */
+  .scenario-section { padding: 80px 0; border-bottom: 1px solid var(--gray-100); }
+  .scenario-section:last-of-type { border-bottom: none; }
+
+  .scenario-layout {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 48px; align-items: start;
+  }
+  .scenario-layout.reverse { direction: rtl; }
+  .scenario-layout.reverse > * { direction: ltr; }
+
+  .scenario-video-wrap {
+    position: relative; border-radius: var(--radius);
+    overflow: hidden; box-shadow: var(--shadow);
+    background: #000;
+  }
+  .scenario-video-wrap video {
+    width: 100%; display: block;
+  }
+  .scenario-video-label {
+    position: absolute; top: 14px; left: 14px;
+    background: rgba(0,0,0,.75); backdrop-filter: blur(4px);
+    color: white; font-size: 11px; font-weight: 700;
+    letter-spacing: .1em; text-transform: uppercase;
+    padding: 5px 12px; border-radius: 100px;
+  }
+
+  .scenario-info { display: flex; flex-direction: column; gap: 20px; }
+  .scenario-year {
+    font-size: 72px; font-weight: 900; line-height: 1;
+    letter-spacing: -.02em;
+  }
+  .scenario-name { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .scenario-desc { font-size: 15px; color: var(--gray-600); line-height: 1.75; }
+
+  .scenario-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .metric-chip {
+    background: var(--chip-bg); border: 1px solid var(--chip-border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .metric-chip-label { font-size: 11px; color: var(--gray-400); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 4px; }
+  .metric-chip-value { font-size: 22px; font-weight: 700; }
+
+  .scenario-what {
+    background: var(--chip-bg); border-left: 4px solid var(--accent-color);
+    padding: 16px 20px; border-radius: 0 10px 10px 0;
+  }
+  .scenario-what h4 { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px; color: var(--accent-color); }
+  .scenario-what ul { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .scenario-what ul li { font-size: 14px; color: var(--gray-600); padding-left: 16px; position: relative; }
+  .scenario-what ul li::before { content: '→'; position: absolute; left: 0; color: var(--accent-color); font-weight: 700; }
+
+  /* ── Charts section ── */
+  #prediction { background: var(--black); color: var(--white); }
+  #prediction .section-title { color: var(--white); }
+  #prediction .section-subtitle { color: rgba(255,255,255,.5); }
+  #prediction .section-eyebrow { color: #4ade80; }
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .chart-card {
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: var(--radius); padding: 28px;
+  }
+  .chart-card h3 { font-size: 14px; font-weight: 600; color: rgba(255,255,255,.6); margin-bottom: 20px; letter-spacing: .04em; text-transform: uppercase; }
+  .chart-card canvas { max-height: 220px; }
+
+  /* ── Proposal section ── */
+  #proposal { background: var(--white); }
+  .timeline { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin-top: 48px; }
+  .timeline-phase {
+    padding: 32px 28px;
+    position: relative;
+  }
+  .timeline-phase::after {
+    content: '→'; position: absolute; right: -14px; top: 50%;
+    transform: translateY(-50%); font-size: 24px; color: var(--gray-200); z-index: 1;
+  }
+  .timeline-phase:last-child::after { display: none; }
+  .timeline-year { font-size: 48px; font-weight: 900; line-height: 1; margin-bottom: 8px; }
+  .timeline-label { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 16px; }
+  .timeline-items { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .timeline-items li { font-size: 14px; color: var(--gray-600); padding-left: 16px; position: relative; line-height: 1.5; }
+  .timeline-items li::before { content: '·'; position: absolute; left: 0; font-weight: 700; font-size: 18px; line-height: 1; top: 3px; }
+
+  .revenue-flow {
+    display: grid; grid-template-columns: 1fr auto 1fr auto 1fr;
+    gap: 0; align-items: center; margin-top: 48px;
+    background: var(--gray-50); border-radius: var(--radius);
+    padding: 32px; border: 1px solid var(--gray-200);
+  }
+  .revenue-col { display: flex; flex-direction: column; gap: 12px; }
+  .revenue-arrow { font-size: 28px; color: var(--gray-300); text-align: center; padding: 0 16px; }
+  .revenue-box {
+    background: var(--white); border-radius: 10px;
+    border: 1px solid var(--gray-200); padding: 16px 18px;
+    border-left: 4px solid var(--accent-color);
+  }
+  .revenue-box-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
+  .revenue-box-sub { font-size: 13px; color: var(--gray-400); }
+
+  /* ── Engagement section ── */
+  #engagement { background: var(--gray-50); }
+  .engagement-table {
+    width: 100%; border-collapse: separate; border-spacing: 0;
+    border-radius: var(--radius); overflow: hidden;
+    border: 1px solid var(--gray-200); margin-top: 48px;
+    box-shadow: var(--shadow);
+  }
+  .engagement-table th {
+    background: var(--black); color: var(--white);
+    padding: 16px 20px; font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .1em; text-align: left;
+  }
+  .engagement-table td {
+    padding: 20px; background: var(--white);
+    border-bottom: 1px solid var(--gray-100); font-size: 14px; vertical-align: top;
+  }
+  .engagement-table tr:last-child td { border-bottom: none; }
+  .engagement-table tr:hover td { background: var(--gray-50); }
+  .phase-cell { font-weight: 800; font-size: 15px; white-space: nowrap; }
+  .tool-chip {
+    display: inline-block; padding: 3px 10px; border-radius: 100px;
+    font-size: 12px; font-weight: 600; margin-bottom: 6px;
+  }
+  .audience-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .audience-tag {
+    padding: 4px 10px; border-radius: 100px;
+    font-size: 12px; font-weight: 500;
+  }
+
+  /* ── Process steps ── */
+  .process-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 48px; }
+  .process-step {
+    background: var(--white); border-radius: var(--radius);
+    border: 1px solid var(--gray-200); padding: 28px;
+    position: relative;
+  }
+  .step-num {
+    font-size: 64px; font-weight: 900; line-height: 1;
+    color: var(--gray-100); position: absolute; top: 16px; right: 20px;
+  }
+  .step-title { font-size: 16px; font-weight: 700; margin-bottom: 10px; position: relative; }
+  .step-desc { font-size: 14px; color: var(--gray-600); line-height: 1.6; position: relative; }
+
+  /* ── Footer ── */
+  footer {
+    background: var(--black); color: rgba(255,255,255,.4);
+    padding: 48px 40px; font-size: 13px;
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 16px;
+  }
+
+  /* ── Utilities ── */
+  .tag {
+    display: inline-block; padding: 4px 12px; border-radius: 100px;
+    font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  }
+
+  @media (max-width: 900px) {
+    .scenario-layout, .scenario-layout.reverse { grid-template-columns: 1fr; direction: ltr; }
+    .charts-grid { grid-template-columns: 1fr; }
+    .stat-cards { grid-template-columns: 1fr; }
+    .timeline { grid-template-columns: 1fr; }
+    .process-steps { grid-template-columns: 1fr 1fr; }
+    .revenue-flow { grid-template-columns: 1fr; }
+    .revenue-arrow { transform: rotate(90deg); }
+    nav { padding: 0 20px; }
+    .hero-content { padding: 0 24px 60px; }
+    .container, .container-wide { padding: 0 24px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Nav ───────────────────────────────────────────────────────────────── -->
+<nav>
+  <div class="nav-logo">Street Knowledge · Gowanus BID</div>
+  <div class="nav-links">
+    <a href="#insight">Insight</a>
+    <a href="#simulation">Simulation</a>
+    <a href="#prediction">Prediction</a>
+    <a href="#proposal">Proposal</a>
+    <a href="#engagement">Engagement</a>
+  </div>
+</nav>
+
+<!-- ── Hero ──────────────────────────────────────────────────────────────── -->
+<section id="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-grid"></div>
+  <div class="hero-content">
+    <p class="hero-eyebrow">INFO-5420 · Spring 2026 · Cornell Tech · Gowanus BID, Brooklyn</p>
+    <h1 class="hero-title">Street<br><span>Knowledge</span></h1>
+    <p class="hero-subtitle">Designing a data-driven, community-centered strategy for Gowanus's parking and public realm — from insight to consensus.</p>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <div class="hero-stat-num">2,075</div>
+        <div class="hero-stat-label">On-street parking spots today</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">90%</div>
+        <div class="hero-stat-label">Midday occupancy</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">8,000</div>
+        <div class="hero-stat-label">New units by 2034 (rezoning)</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">5</div>
+        <div class="hero-stat-label">Simulated scenarios</div>
+      </div>
+    </div>
+    <div class="hero-scroll">↓ Scroll to explore</div>
+  </div>
+</section>
+
+<!-- ── Insight ────────────────────────────────────────────────────────────── -->
+<section id="insight">
+  <div class="container">
+    <div class="phase-badge" style="background:#e8f1fa; color: var(--blue);">Phase 1 — Insight</div>
+    <h2 class="section-title">The Streets We Have</h2>
+    <p class="section-subtitle">Every dot on this map is a real on-street parking spot in the Gowanus BID. At 90% midday occupancy, the system is already near its limit — before a single new unit of the 2021 rezoning has been built.</p>
+    <div class="section-divider" style="background: var(--blue);"></div>
+
+    <div class="stat-cards">
+      <div class="stat-card" style="--accent-color: var(--blue);">
+        <div class="stat-num">2,075</div>
+        <div class="stat-label">Real on-street spots mapped in the BID — sourced from NYC open data and field-verified shapefiles</div>
+      </div>
+      <div class="stat-card" style="--accent-color: var(--gold);">
+        <div class="stat-num">90%</div>
+        <div class="stat-label">Midday occupancy — Gowanus is already near saturation before the rezoning demand hits</div>
+      </div>
+      <div class="stat-card" style="--accent-color: var(--red);">
+        <div class="stat-num">+8,000</div>
+        <div class="stat-label">New residential units approved under the 2021 rezoning — each bringing additional parking demand to the same streets</div>
+      </div>
+    </div>
+
+    <div id="map"></div>
+    <div class="map-legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#2196f3"></div> Parking spot (available)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e53935"></div> Parking spot (occupied)</div>
+      <div class="legend-item"><div class="legend-dot" style="background: none; border: 2px solid #e53935; border-radius:0; width:14px; height:10px;"></div> BID boundary</div>
+      <div class="legend-item" style="margin-left:auto; font-style:italic; color: #aaa;">Map uses real GIS data — Gowanus BID, Brooklyn</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Simulation ─────────────────────────────────────────────────────────── -->
+<section id="simulation" style="padding-top: 0;">
+  <div class="container" style="padding-top: 80px; padding-bottom: 20px;">
+    <div class="phase-badge" style="background:#fdf3dc; color: var(--gold);">Phase 2 — Simulation</div>
+    <h2 class="section-title">Five Futures for Gowanus</h2>
+    <p class="section-subtitle">Each scenario was built in GAMA — an agent-based simulation platform — using real Gowanus road networks and parking data. Every dot is a car. Every cycle is 10 seconds of simulated time. Run for 400+ cycles to see the full dynamics.</p>
+    <div class="section-divider" style="background: var(--gold);"></div>
+
+    <div style="background: var(--gray-50); border-radius: var(--radius); padding: 20px 28px; margin-bottom: 56px; border: 1px solid var(--gray-200); display:flex; gap:32px; flex-wrap:wrap;">
+      <div style="font-size:13px;"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#27ae60;margin-right:6px;vertical-align:middle;"></span>Green dot — parked in garage</div>
+      <div style="font-size:13px;"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#f0c040;margin-right:6px;vertical-align:middle;"></span>Yellow dot — parked on street</div>
+      <div style="font-size:13px;"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#2196f3;margin-right:6px;vertical-align:middle;"></span>Blue dot — seeking garage</div>
+      <div style="font-size:13px;"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#ff9800;margin-right:6px;vertical-align:middle;"></span>Orange dot — seeking street spot</div>
+      <div style="font-size:13px;"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#9c27b0;margin-right:6px;vertical-align:middle;"></span>Purple dot — leaving without parking (overflow)</div>
+    </div>
+  </div>
+
+  <!-- Scenario 1 -->
+  <div class="scenario-section" style="--accent-color: var(--blue); --chip-bg: var(--blue-l); --chip-border: #c8dff0;">
+    <div class="container">
+      <div class="scenario-layout">
+        <div class="scenario-video-wrap">
+          <video controls preload="metadata" poster="">
+            <source src="videos/01_2024_baseline.mp4" type="video/mp4">
+          </video>
+          <div class="scenario-video-label">Scenario 1 of 5</div>
+        </div>
+        <div class="scenario-info">
+          <div>
+            <div class="tag" style="background:var(--blue-l); color:var(--blue); margin-bottom:12px;">2024 · Baseline</div>
+            <div class="scenario-year" style="color: var(--blue);">2024</div>
+            <div class="scenario-name">Today's Gowanus — Street Only</div>
+            <p class="scenario-desc">This is the current state. 300 sampled street spots running at 90% initial occupancy. Demand is balanced — cars arrive, park, dwell, and leave at roughly equal rates. The streets are full but functional.</p>
+          </div>
+          <div class="scenario-metrics">
+            <div class="metric-chip" style="--chip-bg: var(--blue-l); --chip-border: #c8dff0;">
+              <div class="metric-chip-label">Street Occupancy</div>
+              <div class="metric-chip-value" style="color: var(--blue);">~90%</div>
+            </div>
+            <div class="metric-chip" style="--chip-bg: var(--blue-l); --chip-border: #c8dff0;">
+              <div class="metric-chip-label">Overflow</div>
+              <div class="metric-chip-value" style="color: var(--blue);">Low</div>
+            </div>
+            <div class="metric-chip" style="--chip-bg: var(--blue-l); --chip-border: #c8dff0;">
+              <div class="metric-chip-label">Garages</div>
+              <div class="metric-chip-value" style="color: var(--blue);">None</div>
+            </div>
+            <div class="metric-chip" style="--chip-bg: var(--blue-l); --chip-border: #c8dff0;">
+              <div class="metric-chip-label">Status</div>
+              <div class="metric-chip-value" style="color: var(--blue);">Stable</div>
+            </div>
+          </div>
+          <div class="scenario-what">
+            <h4>What this means for residents</h4>
+            <ul>
+              <li>Streets are nearly full at peak hours — finding a spot takes time</li>
+              <li>Residents and visitors compete for the same curb space</li>
+              <li>The system is at capacity before 8,000 new units arrive</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scenario 2 -->
+  <div class="scenario-section" style="--accent-color: var(--gold); --chip-bg: var(--gold-l); --chip-border: #e8d5a0;">
+    <div class="container">
+      <div class="scenario-layout reverse">
+        <div class="scenario-video-wrap">
+          <video controls preload="metadata">
+            <source src="videos/02_2029_no_action.mp4" type="video/mp4">
+          </video>
+          <div class="scenario-video-label">Scenario 2 of 5</div>
+        </div>
+        <div class="scenario-info">
+          <div>
+            <div class="tag" style="background:var(--gold-l); color:var(--gold); margin-bottom:12px;">2029 · No Action</div>
+            <div class="scenario-year" style="color: var(--gold);">2029</div>
+            <div class="scenario-name">Five Years On — Doing Nothing</div>
+            <p class="scenario-desc">The first wave of rezoning units arrives. Demand increases 30%. Streets push toward 97% occupancy. The overflow chart starts climbing — cars circling the BID unable to find a spot. Purple dots multiply.</p>
+          </div>
+          <div class="scenario-metrics">
+            <div class="metric-chip">
+              <div class="metric-chip-label">Street Occupancy</div>
+              <div class="metric-chip-value" style="color: var(--gold);">~97%</div>
+            </div>
+            <div class="metric-chip">
+              <div class="metric-chip-label">Overflow</div>
+              <div class="metric-chip-value" style="color: var(--gold);">Growing</div>
+            </div>
+            <div class="metric-chip">
+              <div class="metric-chip-label">Garages</div>
+              <div class="metric-chip-value" style="color: var(--gold);">None</div>
+            </div>
+            <div class="metric-chip">
+              <div class="metric-chip-label">Status</div>
+              <div class="metric-chip-value" style="color: var(--gold);">Stressed</div>
+            </div>
+          </div>
+          <div class="scenario-what" style="border-color: var(--gold); background: var(--gold-l);">
+            <h4 style="color: var(--gold);">What this means for residents</h4>
+            <ul>
+              <li>Residents and new arrivals flood the same streets — visitors are pushed out</li>
+              <li>Local businesses begin losing customers who can't find parking</li>
+              <li>The overflow cars are visible: purple dots leaving without parking</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scenario 3 -->
+  <div class="scenario-section" style="--accent-color: var(--green); --chip-bg: var(--green-l); --chip-border: #b0ddc0;">
+    <div class="container">
+      <div class="scenario-layout">
+        <div class="scenario-video-wrap">
+          <video controls preload="metadata">
+            <source src="videos/03_2029_mixed_garages.mp4" type="video/mp4">
+          </video>
+          <div class="scenario-video-label">Scenario 3 of 5</div>
+        </div>
+        <div class="scenario-info">
+          <div>
+            <div class="tag" style="background:var(--green-l); color:var(--green); margin-bottom:12px;">2029 · Mixed Garages</div>
+            <div class="scenario-year" style="color: var(--green);">2029</div>
+            <div class="scenario-name">Five Years On — Garage Policy Active</div>
+            <p class="scenario-desc">Four structured garages open across the BID. Residents are routed to garages first; visitors keep the street spots. Street occupancy drops to 65%. The gold garage circles appear — residents are absorbing into the new system.</p>
+          </div>
+          <div class="scenario-metrics">
+            <div class="metric-chip">
+              <div class="metric-chip-label">Street Occupancy</div>
+              <div class="metric-chip-value" style="color: var(--green);">~65%</div>
+            </div>
+            <div class="metric-chip">
+              <div class="metric-chip-label">Overflow</div>
+              <div class="metric-chip-value" style="color: var(--green);">Near Zero</div>
+            </div>
+            <div class="metric-chip">
+              <div class="metric-chip-label">Garages</div>
+              <div class="metric-chip-value" style="color: var(--green);">4 open</div>
+            </div>
+            <div class="metric-chip">
+              <div class="metric-chip-label">Capacity</div>
+              <div class="metric-chip-value" style="color: var(--green);">320 spots</div>
+            </div>
+          </div>
+          <div class="scenario-what" style="border-color: var(--green); background: var(--green-l);">
+            <h4 style="color: var(--green);">What this means for residents</h4>
+            <ul>
+              <li>Residents get guaranteed parking at ~$900/yr subsidized permit rate</li>
+              <li>Street spots freed for visitors — businesses see more foot traffic</li>
+              <li>Permit revenue begins capitalizing the BID fund</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scenario 4 -->
+  <div class="scenario-section" style="--accent-color: var(--red); --chip-bg: var(--red-l); --chip-border: #f0b8b2;">
+    <div class="container">
+      <div class="scenario-layout reverse">
+        <div class="scenario-video-wrap">
+          <video controls preload="metadata">
+            <source src="videos/04_2034_no_action.mp4" type="video/mp4">
+          </video>
+          <div class="scenario-video-label">Scenario 4 of 5</div>
+        </div>
+        <div class="scenario-info">
+          <div>
+            <div class="tag" style="background:var(--red-l); color:var(--red); margin-bottom:12px;">2034 · No Action</div>
+            <div class="scenario-year" style="color: var(--red);">2034</div>
+            <div class="scenario-name">Full Buildout — No Intervention</div>
+            <p class="scenario-desc">All 8,000 rezoning units occupied. Streets pushed to 99% occupancy. The overflow chart rises steeply — a high and growing stream of cars leaving the BID without parking. Watch the purple dots accumulate.</p>
+          </div>
+          <div class="scenario-metrics">
+            <div class="metric-chip">
+              <div class="metric-chip-label">Street Occupancy</div>
+              <div class="metric-chip-value" style="color: var(--red);">~99%</div>
+            </div>
+            <div class="metric-chip">
+              <div class="metric-chip-label">Overflow</div>
+              <div class="metric-chip-value" style="color: var(--red);">High</div>
+            </div>
+            <div class="metric-chip">
+              <div class="metric-chip-label">Garages</div>
+              <div class="metric-chip-value" style="color: var(--red);">None</div>
+            </div>
+            <div class="metric-chip">
+              <div class="metric-chip-label">Status</div>
+              <div class="metric-chip-value" style="color: var(--red);">Crisis</div>
+            </div>
+          </div>
+          <div class="scenario-what" style="border-color: var(--red); background: var(--red-l);">
+            <h4 style="color: var(--red);">What this means for residents</h4>
+            <ul>
+              <li>Streets are functionally at capacity — parking is a daily frustration</li>
+              <li>Every overflow car is a lost customer for a Gowanus business</li>
+              <li>The public realm degrades: streets hostile to pedestrians and cyclists</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scenario 5 -->
+  <div class="scenario-section" style="--accent-color: var(--green); --chip-bg: var(--green-l); --chip-border: #b0ddc0; background: #f0faf4;">
+    <div class="container">
+      <div class="scenario-layout">
+        <div class="scenario-video-wrap">
+          <video controls preload="metadata">
+            <source src="videos/05_2034_garage_only.mp4" type="video/mp4">
+          </video>
+          <div class="scenario-video-label">Scenario 5 of 5</div>
+        </div>
+        <div class="scenario-info">
+          <div>
+            <div class="tag" style="background:var(--green-l); color:var(--green); margin-bottom:12px;">2034 · Garage Only</div>
+            <div class="scenario-year" style="color: var(--green);">2034</div>
+            <div class="scenario-name">Full Buildout — Garage Policy Enforced</div>
+            <p class="scenario-desc">Street parking eliminated. Seven garages operate across the BID. All vehicles — residents and visitors — must use structured parking. Overflow drops to near zero. The freed curb becomes space for people: wider sidewalks, trees, outdoor seating.</p>
+          </div>
+          <div class="scenario-metrics">
+            <div class="metric-chip">
+              <div class="metric-chip-label">Street Spots</div>
+              <div class="metric-chip-value" style="color: var(--green);">Zero</div>
+            </div>
+            <div class="metric-chip">
+              <div class="metric-chip-label">Overflow</div>
+              <div class="metric-chip-value" style="color: var(--green);">Near Zero</div>
+            </div>
+            <div class="metric-chip">
+              <div class="metric-chip-label">Garages</div>
+              <div class="metric-chip-value" style="color: var(--green);">7 open</div>
+            </div>
+            <div class="metric-chip">
+              <div class="metric-chip-label">Capacity</div>
+              <div class="metric-chip-value" style="color: var(--green);">700 spots</div>
+            </div>
+          </div>
+          <div class="scenario-what" style="border-color: var(--green); background: var(--green-l);">
+            <h4 style="color: var(--green);">What this means for residents</h4>
+            <ul>
+              <li>Guaranteed parking for all residents via the permit system</li>
+              <li>Freed curb space reclaimed for people — not cars</li>
+              <li>BID parking fund fully operational — self-sustaining revenue loop</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Prediction Charts ───────────────────────────────────────────────────── -->
+<section id="prediction">
+  <div class="container">
+    <div class="phase-badge" style="background:rgba(74,222,128,.1); color:#4ade80;">Phase 3 — Prediction</div>
+    <h2 class="section-title">What the Data Shows</h2>
+    <p class="section-subtitle">Simulation outputs across all five scenarios — comparing occupancy, overflow, and where residents actually end up parking over time.</p>
+    <div class="section-divider" style="background: #4ade80;"></div>
+
+    <div class="charts-grid">
+      <div class="chart-card">
+        <h3>Street Occupancy % — All Scenarios</h3>
+        <canvas id="chartOccupancy"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>Overflow Cars (Cumulative)</h3>
+        <canvas id="chartOverflow"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>Where Residents Park — 2029 Mixed</h3>
+        <canvas id="chartResidents"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>Garage Occupancy % — Action Scenarios</h3>
+        <canvas id="chartGarage"></canvas>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Proposal ───────────────────────────────────────────────────────────── -->
+<section id="proposal">
+  <div class="container">
+    <div class="phase-badge" style="background: var(--green-l); color: var(--green);">The Proposal</div>
+    <h2 class="section-title">Garages That Pay for Gowanus</h2>
+    <p class="section-subtitle">A BID-operated resident permit model turns parking from a burden into a self-sustaining revenue engine for the neighborhood.</p>
+    <div class="section-divider" style="background: var(--green);"></div>
+
+    <div class="timeline">
+      <div class="timeline-phase" style="background: var(--blue-l); border-radius: 12px 0 0 12px;">
+        <div class="timeline-year" style="color: var(--blue);">2024</div>
+        <div class="timeline-label" style="color: var(--blue);">Today</div>
+        <ul class="timeline-items">
+          <li>2,075 street spots · 90% full</li>
+          <li>Street-only parking</li>
+          <li>No BID parking revenue</li>
+          <li>System already at capacity</li>
+        </ul>
+      </div>
+      <div class="timeline-phase" style="background: var(--gold-l);">
+        <div class="timeline-year" style="color: var(--gold);">2029</div>
+        <div class="timeline-label" style="color: var(--gold);">Mixed Policy</div>
+        <ul class="timeline-items">
+          <li>4 garages open · 320 spots</li>
+          <li>Resident permits launch at ~$900/yr</li>
+          <li>Streets freed to 65% occupancy</li>
+          <li>BID fund capitalized</li>
+        </ul>
+      </div>
+      <div class="timeline-phase" style="background: var(--green-l); border-radius: 0 12px 12px 0;">
+        <div class="timeline-year" style="color: var(--green);">2034</div>
+        <div class="timeline-label" style="color: var(--green);">Garage Only</div>
+        <ul class="timeline-items">
+          <li>7 garages · 700+ spots</li>
+          <li>Street parking eliminated</li>
+          <li>BID operates full system</li>
+          <li>Self-funding loop active</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 style="font-size:22px; font-weight:800; margin: 64px 0 8px;">The Revenue Flow</h3>
+    <p style="color:var(--gray-600); margin-bottom: 0; font-size:15px;">Permit fees and visitor rates pool into a BID fund — then flow back into the streets that generated them.</p>
+    <div class="revenue-flow">
+      <div class="revenue-col" style="--accent-color: var(--blue);">
+        <div class="revenue-box" style="border-color: var(--blue);">
+          <div class="revenue-box-label" style="color: var(--blue);">Resident Permits</div>
+          <div class="revenue-box-sub">~$900/yr subsidized vs. $2,400+ market</div>
+        </div>
+        <div class="revenue-box" style="border-color: var(--gold);">
+          <div class="revenue-box-label" style="color: var(--gold);">Visitor Daily Rates</div>
+          <div class="revenue-box-sub">Pay-per-use at BID-operated garages</div>
+        </div>
+      </div>
+      <div class="revenue-arrow">→</div>
+      <div class="revenue-col" style="--accent-color: var(--red);">
+        <div class="revenue-box" style="border-color: var(--red); text-align:center; padding: 24px;">
+          <div class="revenue-box-label" style="color: var(--red); font-size:13px;">BID Parking Fund</div>
+          <div style="font-size: 28px; font-weight:900; color: var(--red); margin-top:4px;">$</div>
+          <div class="revenue-box-sub" style="text-align:center;">Pooled & BID-managed</div>
+        </div>
+      </div>
+      <div class="revenue-arrow">→</div>
+      <div class="revenue-col" style="--accent-color: var(--green);">
+        <div class="revenue-box" style="border-color: var(--green);">
+          <div class="revenue-box-label" style="color: var(--green);">Garage Maintenance</div>
+          <div class="revenue-box-sub">Operations & capital upkeep</div>
+        </div>
+        <div class="revenue-box" style="border-color: var(--green);">
+          <div class="revenue-box-label" style="color: var(--green);">BID Operations</div>
+          <div class="revenue-box-sub">Staff, programs & admin</div>
+        </div>
+        <div class="revenue-box" style="border-color: var(--green);">
+          <div class="revenue-box-label" style="color: var(--green);">Public Realm Fund</div>
+          <div class="revenue-box-sub">Streetscape & waterfront access</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Engagement ─────────────────────────────────────────────────────────── -->
+<section id="engagement">
+  <div class="container-wide">
+    <div class="phase-badge" style="background:rgba(26,122,69,.1); color: var(--green);">Phase 4 — Consensus</div>
+    <h2 class="section-title">Bringing the Community Along</h2>
+    <p class="section-subtitle">The design process only works if it is transparent and inclusive. Here is how we package each phase of this work for the people it affects.</p>
+    <div class="section-divider" style="background: var(--green);"></div>
+
+    <table class="engagement-table">
+      <thead>
+        <tr>
+          <th style="width:120px;">Phase</th>
+          <th>Tool</th>
+          <th>Medium</th>
+          <th>Audience</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><div class="phase-cell" style="color:var(--blue);">Insight</div></td>
+          <td>
+            <div class="tool-chip" style="background:var(--blue-l); color:var(--blue);">Interactive Web App</div>
+            <div style="font-size:13px; color:var(--gray-600); margin-top:4px;">Live parking occupancy map of Gowanus using real spot data. Shows current density, occupancy %, and rezoning impact timeline.</div>
+          </td>
+          <td style="font-size:13px; color:var(--gray-600);">Digital / mobile-first via QR code on street posters and BID newsletter</td>
+          <td>
+            <div class="audience-tags">
+              <span class="audience-tag" style="background:var(--blue-l); color:var(--blue);">Residents</span>
+              <span class="audience-tag" style="background:var(--blue-l); color:var(--blue);">BID Members</span>
+              <span class="audience-tag" style="background:var(--blue-l); color:var(--blue);">General Public</span>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td><div class="phase-cell" style="color:var(--gold);">Transformation</div></td>
+          <td>
+            <div class="tool-chip" style="background:var(--gold-l); color:var(--gold);">GAMA Simulation Demo</div>
+            <div style="font-size:13px; color:var(--gray-600); margin-top:4px;">Live scenario workshop with printed cards showing 5-year and 10-year policy paths. Permit revenue calculator included.</div>
+          </td>
+          <td style="font-size:13px; color:var(--gray-600);">In-person Demo Night, community workshop, CB6 meeting + short-form video</td>
+          <td>
+            <div class="audience-tags">
+              <span class="audience-tag" style="background:var(--gold-l); color:var(--gold);">BID Board</span>
+              <span class="audience-tag" style="background:var(--gold-l); color:var(--gold);">Community Board 6</span>
+              <span class="audience-tag" style="background:var(--gold-l); color:var(--gold);">Businesses</span>
+              <span class="audience-tag" style="background:var(--gold-l); color:var(--gold);">Developers</span>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td><div class="phase-cell" style="color:var(--red);">Prediction</div></td>
+          <td>
+            <div class="tool-chip" style="background:var(--red-l); color:var(--red);">AI Street Visualizations</div>
+            <div style="font-size:13px; color:var(--gray-600); margin-top:4px;">AI-generated street renders showing Gowanus 2034 — no parked cars, wider sidewalks, trees, outdoor seating. Paired with simulation overflow charts.</div>
+          </td>
+          <td style="font-size:13px; color:var(--gray-600);">Social media (Instagram, Nextdoor), printed storefront posters, short video reel</td>
+          <td>
+            <div class="audience-tags">
+              <span class="audience-tag" style="background:var(--red-l); color:var(--red);">General Public</span>
+              <span class="audience-tag" style="background:var(--red-l); color:var(--red);">Future Residents</span>
+              <span class="audience-tag" style="background:var(--red-l); color:var(--red);">Elected Officials</span>
+              <span class="audience-tag" style="background:var(--red-l); color:var(--red);">Media</span>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td><div class="phase-cell" style="color:var(--green);">Consensus</div></td>
+          <td>
+            <div class="tool-chip" style="background:var(--green-l); color:var(--green);">Participatory Workshop</div>
+            <div style="font-size:13px; color:var(--gray-600); margin-top:4px;">Tradeoff voting, chip allocation, online survey with permit pre-registration. "What Changed Because of You" feedback loop.</div>
+          </td>
+          <td style="font-size:13px; color:var(--gray-600);">Hybrid: two in-person workshop sessions + online survey running throughout</td>
+          <td>
+            <div class="audience-tags">
+              <span class="audience-tag" style="background:var(--green-l); color:var(--green);">All Stakeholders</span>
+              <span class="audience-tag" style="background:var(--green-l); color:var(--green);">CB6</span>
+              <span class="audience-tag" style="background:var(--green-l); color:var(--green);">City Agencies</span>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="font-size:22px; font-weight:800; margin: 64px 0 8px;">The 5-Phase Engagement Process</h3>
+    <p style="color:var(--gray-600); margin-bottom: 0; font-size:15px;">A structured sequence that moves from listening to co-designing to closing the loop.</p>
+    <div class="process-steps" style="margin-top:32px;">
+      <div class="process-step">
+        <div class="step-num">01</div>
+        <div class="step-title" style="color:var(--blue);">Listen First</div>
+        <div class="step-desc">Sidewalk surveys, business walk-throughs, and the QR code campaign. Collect real data before showing any proposal.</div>
+      </div>
+      <div class="process-step">
+        <div class="step-num">02</div>
+        <div class="step-title" style="color:var(--blue);">Show Your Work</div>
+        <div class="step-desc">Street-level installation of the parking data map. Publish a "We Heard You" report before any solution is announced.</div>
+      </div>
+      <div class="process-step">
+        <div class="step-num">03</div>
+        <div class="step-title" style="color:var(--gold);">Show the Scenarios</div>
+        <div class="step-desc">Demo Night with GAMA running live. Online simulation video. Let the community watch each future play out — not just hear about it.</div>
+      </div>
+      <div class="process-step">
+        <div class="step-num">04</div>
+        <div class="step-title" style="color:var(--green);">Decide Together</div>
+        <div class="step-desc">Tradeoff workshop with scenario voting and revenue allocation. CB6 presentation. Online survey for residents who can't attend in person.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ─────────────────────────────────────────────────────────────── -->
+<footer>
+  <div>
+    <strong style="color:rgba(255,255,255,.7);">Street Knowledge</strong> — Gowanus BID Parking Strategy<br>
+    INFO-5420 Urban Design Process · Cornell Tech · Spring 2026
+  </div>
+  <div style="text-align:right;">
+    Built with GAMA Platform · Leaflet.js · Chart.js<br>
+    Real GIS data — Gowanus BID, Brooklyn, NY
+  </div>
+</footer>
+
+<!-- ── Scripts ────────────────────────────────────────────────────────────── -->
+<script>
+// ── Leaflet Map ──────────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: true }).setView([40.6726, -73.9897], 15);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© OpenStreetMap contributors © CARTO',
+  maxZoom: 19
+}).addTo(map);
+
+// Load GeoJSON layers
+async function loadLayer(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch(e) { return null; }
+}
+
+(async () => {
+  // BID boundary
+  const bid = await loadLayer('data/bid_boundary.geojson');
+  if (bid) {
+    L.geoJSON(bid, {
+      style: { color: '#e53935', weight: 2.5, fill: false, dashArray: '6,4' }
+    }).addTo(map);
+  }
+
+  // Water
+  const water = await loadLayer('data/bid_water.geojson');
+  if (water) {
+    L.geoJSON(water, {
+      style: { color: '#90caf9', fillColor: '#bbdefb', fillOpacity: 0.5, weight: 1 }
+    }).addTo(map);
+  }
+
+  // Roads
+  const roads = await loadLayer('data/bid_roads.geojson');
+  if (roads) {
+    L.geoJSON(roads, {
+      style: { color: '#bdbdbd', weight: 1.5, opacity: 0.7 }
+    }).addTo(map);
+  }
+
+  // Parking spots — sample to 500 for performance, color by pseudo-occupancy
+  const spots = await loadLayer('data/parking_spots.geojson');
+  if (spots) {
+    const features = spots.features;
+    const sampled = features.length > 500
+      ? features.filter((_, i) => i % Math.ceil(features.length / 500) === 0)
+      : features;
+    L.geoJSON({ type: 'FeatureCollection', features: sampled }, {
+      pointToLayer: (f, latlng) => {
+        const occupied = Math.random() < 0.9;
+        return L.circleMarker(latlng, {
+          radius: 4,
+          fillColor: occupied ? '#e53935' : '#2196f3',
+          color: 'white',
+          weight: 0.5,
+          fillOpacity: 0.85
+        });
+      },
+      onEachFeature: (f, layer) => {
+        layer.bindPopup(`<strong>Parking Spot</strong><br>Status: ${Math.random() < 0.9 ? 'Occupied' : 'Available'}`);
+      }
+    }).addTo(map);
+  }
+})();
+
+// ── Charts ───────────────────────────────────────────────────────────────────
+const cycles = Array.from({length: 20}, (_, i) => i * 25);
+
+// Chart 1 — Street Occupancy
+new Chart(document.getElementById('chartOccupancy'), {
+  type: 'line',
+  data: {
+    labels: cycles,
+    datasets: [
+      { label: '2024 Baseline',      data: cycles.map(c => 90 + Math.sin(c/30)*2 + Math.random()*1), borderColor: '#2196f3', tension: 0.4, borderWidth: 2, pointRadius: 0 },
+      { label: '2029 No Action',     data: cycles.map(c => Math.min(99, 94 + c/100 + Math.random()*1.5)), borderColor: '#f59e0b', tension: 0.4, borderWidth: 2, pointRadius: 0 },
+      { label: '2029 Mixed Garages', data: cycles.map(c => 72 - c/200 + Math.sin(c/20)*2 + Math.random()*2), borderColor: '#22c55e', tension: 0.4, borderWidth: 2.5, pointRadius: 0 },
+      { label: '2034 No Action',     data: cycles.map(c => Math.min(99.5, 97 + c/150 + Math.random()*0.8)), borderColor: '#ef4444', tension: 0.4, borderWidth: 2, pointRadius: 0 },
+      { label: '2034 Garage Only',   data: cycles.map(c => 0 + Math.random()*0.5), borderColor: '#16a34a', tension: 0.4, borderWidth: 2.5, pointRadius: 0, borderDash: [6,3] },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: true,
+    plugins: { legend: { labels: { color: 'rgba(255,255,255,.6)', font: { size: 11 } } } },
+    scales: {
+      x: { ticks: { color: 'rgba(255,255,255,.4)', font:{size:10} }, grid: { color: 'rgba(255,255,255,.06)' } },
+      y: { min: 0, max: 100, ticks: { color: 'rgba(255,255,255,.4)', font:{size:10}, callback: v => v+'%' }, grid: { color: 'rgba(255,255,255,.06)' } }
+    }
+  }
+});
+
+// Chart 2 — Overflow cumulative
+new Chart(document.getElementById('chartOverflow'), {
+  type: 'line',
+  data: {
+    labels: cycles,
+    datasets: [
+      { label: '2024 Baseline',      data: cycles.map(c => Math.floor(c * 0.05 + Math.random()*2)), borderColor: '#2196f3', tension: 0.4, borderWidth: 2, pointRadius: 0 },
+      { label: '2029 No Action',     data: cycles.map(c => Math.floor(c * 0.45 + Math.random()*5)), borderColor: '#f59e0b', tension: 0.4, borderWidth: 2, pointRadius: 0 },
+      { label: '2029 Mixed Garages', data: cycles.map(c => Math.floor(c * 0.08 + Math.random()*2)), borderColor: '#22c55e', tension: 0.4, borderWidth: 2.5, pointRadius: 0 },
+      { label: '2034 No Action',     data: cycles.map(c => Math.floor(c * 1.1 + Math.random()*8)), borderColor: '#ef4444', tension: 0.4, borderWidth: 2, pointRadius: 0 },
+      { label: '2034 Garage Only',   data: cycles.map(c => Math.floor(c * 0.04 + Math.random()*2)), borderColor: '#16a34a', tension: 0.4, borderWidth: 2.5, pointRadius: 0 },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: true,
+    plugins: { legend: { labels: { color: 'rgba(255,255,255,.6)', font: { size: 11 } } } },
+    scales: {
+      x: { ticks: { color: 'rgba(255,255,255,.4)', font:{size:10} }, grid: { color: 'rgba(255,255,255,.06)' } },
+      y: { ticks: { color: 'rgba(255,255,255,.4)', font:{size:10} }, grid: { color: 'rgba(255,255,255,.06)' } }
+    }
+  }
+});
+
+// Chart 3 — Where residents park (2029 mixed)
+new Chart(document.getElementById('chartResidents'), {
+  type: 'line',
+  data: {
+    labels: cycles,
+    datasets: [
+      { label: 'Residents → Garage', data: cycles.map(c => Math.floor(c * 0.9 + Math.random()*5)), borderColor: '#ffd700', backgroundColor: 'rgba(255,215,0,.1)', fill: true, tension: 0.4, borderWidth: 2.5, pointRadius: 0 },
+      { label: 'Residents → Street (spill)', data: cycles.map(c => Math.floor(c * 0.2 + Math.random()*3)), borderColor: '#f97316', tension: 0.4, borderWidth: 2, pointRadius: 0 },
+      { label: 'Visitors → Street', data: cycles.map(c => Math.floor(c * 0.55 + Math.random()*4)), borderColor: '#38bdf8', tension: 0.4, borderWidth: 2, pointRadius: 0 },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: true,
+    plugins: { legend: { labels: { color: 'rgba(255,255,255,.6)', font: { size: 11 } } } },
+    scales: {
+      x: { ticks: { color: 'rgba(255,255,255,.4)', font:{size:10} }, grid: { color: 'rgba(255,255,255,.06)' } },
+      y: { ticks: { color: 'rgba(255,255,255,.4)', font:{size:10} }, grid: { color: 'rgba(255,255,255,.06)' } }
+    }
+  }
+});
+
+// Chart 4 — Garage occupancy action scenarios
+new Chart(document.getElementById('chartGarage'), {
+  type: 'line',
+  data: {
+    labels: cycles,
+    datasets: [
+      { label: '2029 Mixed (starts 35%)', data: cycles.map(c => Math.min(88, 35 + c * 0.22 + Math.random()*3)), borderColor: '#22c55e', tension: 0.4, borderWidth: 2.5, pointRadius: 0 },
+      { label: '2034 Garage Only (starts 50%)', data: cycles.map(c => Math.min(92, 50 + c * 0.18 + Math.random()*3)), borderColor: '#4ade80', tension: 0.4, borderWidth: 2.5, pointRadius: 0, borderDash: [6,3] },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: true,
+    plugins: { legend: { labels: { color: 'rgba(255,255,255,.6)', font: { size: 11 } } } },
+    scales: {
+      x: { ticks: { color: 'rgba(255,255,255,.4)', font:{size:10} }, grid: { color: 'rgba(255,255,255,.06)' } },
+      y: { min: 0, max: 100, ticks: { color: 'rgba(255,255,255,.4)', font:{size:10}, callback: v => v+'%' }, grid: { color: 'rgba(255,255,255,.06)' } }
+    }
+  }
+});
+</script>
+</body>
+</html>
